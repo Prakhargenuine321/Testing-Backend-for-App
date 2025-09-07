@@ -2,6 +2,7 @@
 import express from "express";
 import cors from "cors";
 import nodemailer from "nodemailer";
+import multer from "multer";
 
 const app = express();
 app.use(cors());
@@ -50,8 +51,16 @@ app.get("/health", async (_req, res) => {
   }
 });
 
+const upload = multer({
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB per file
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) cb(null, true);
+    else cb(new Error("Only images allowed"));
+  },
+});
+
 // Main endpoint
-app.post("/send-email", async (req, res) => {
+app.post("/send-email", upload.array("images", 5), async (req, res) => {
   try {
     const { name, contactNumber, area, locality, wasteType, wasteAmount, location } = req.body || {};
     if (!name || !contactNumber || !area || !locality || !wasteType || !wasteAmount || !location) {
@@ -59,6 +68,19 @@ app.post("/send-email", async (req, res) => {
         .status(400)
         .json({ success: false, message: "Missing fields: name/contactNumber/area/locality/wasteType/wasteAmount/location" });
     }
+
+    // Handle images
+    const files = req.files || [];
+    if (files.length > 5) {
+      return res.status(400).json({ success: false, message: "Max 5 images allowed" });
+    }
+
+    // Prepare attachments for nodemailer
+    const attachments = files.map((file) => ({
+      filename: file.originalname,
+      content: file.buffer,
+      contentType: file.mimetype,
+    }));
 
     const fromAddress = process.env.MAIL_FROM || process.env.SMTP_USER;
     const toAddress = process.env.MAIL_TO || process.env.RECEIVER_EMAIL;
@@ -98,6 +120,7 @@ app.post("/send-email", async (req, res) => {
       subject: "New Form Submission",
       text,
       html,
+      attachments,
     });
 
     res.json({ success: true, message: "Email sent" });
