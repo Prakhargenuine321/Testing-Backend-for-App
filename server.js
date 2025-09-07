@@ -3,32 +3,24 @@ import cors from "cors";
 import emailjs from "emailjs-com";
 
 const app = express();
-app.use(cors());
 app.use(express.json());
+app.use(cors());
 
+// test route
 app.get("/", (req, res) => {
-  res.send("🚀 Backend is running fine!");
+  res.send("🚀 Backend running on Render!");
 });
 
-
+// your email route
 app.post("/send-email", (req, res) => {
   const { name, phone, location } = req.body;
 
   emailjs
-    .send(
-      "service_pu3uyoj",   // from EmailJS dashboard
-      "template_tg4mh64",  // from template
-      { name, phone, location },
-      "jIFhfIgtMu7lXYAqP"    // from EmailJS API keys
-    )
-    .then(() => {
-      res.json({ success: true });
-    })
-    .catch((err) => {
-      console.error(err);
-      res.status(500).json({ success: false, error: err });
-    });
+    .send("SERVICE_ID", "TEMPLATE_ID", { name, phone, location }, "PUBLIC_KEY")
+    .then(() => res.send({ success: true }))
+    .catch((err) => res.status(500).send(err));
 });
 
-const PORT = 5000;
-app.listen(PORT, () => console.log(`✅ Server running on http://localhost:${PORT}`));
+// 🔑 important change
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
