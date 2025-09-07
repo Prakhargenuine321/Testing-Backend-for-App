@@ -53,37 +53,42 @@ app.get("/health", async (_req, res) => {
 // Main endpoint
 app.post("/send-email", async (req, res) => {
   try {
-    const { name, phone, location, email } = req.body || {};
-    if (!name || !phone || !location) {
+    const { name, contactNumber, area, locality, wasteType, wasteAmount, location } = req.body || {};
+    if (!name || !contactNumber || !area || !locality || !wasteType || !wasteAmount || !location) {
       return res
         .status(400)
-        .json({ success: false, message: "Missing fields: name/phone/location" });
+        .json({ success: false, message: "Missing fields: name/contactNumber/area/locality/wasteType/wasteAmount/location" });
     }
 
-    const fromAddress = process.env.MAIL_FROM || process.env.SMTP_USER; // sender mailbox
-    const toAddress = process.env.MAIL_TO || process.env.RECEIVER_EMAIL; // owner mailbox
+    const fromAddress = process.env.MAIL_FROM || process.env.SMTP_USER;
+    const toAddress = process.env.MAIL_TO || process.env.RECEIVER_EMAIL;
 
     if (!fromAddress || !toAddress) {
       return res.status(500).json({
         success: false,
-        message:
-          "Server not configured: set MAIL_FROM and MAIL_TO (or RECEIVER_EMAIL)",
+        message: "Server not configured: set MAIL_FROM and MAIL_TO (or RECEIVER_EMAIL)",
       });
     }
 
     const text = `New submission:
 - Name: ${name}
-- Phone: ${phone}
-- Location: ${location}
-- User Email: ${email || "(not provided)"}`;
+- Contact Number: ${contactNumber}
+- Area: ${area}
+- Locality: ${locality}
+- Type Of Waste: ${wasteType}
+- Amount Of Waste: ${wasteAmount}
+- Location: ${location}`;
 
     const html = `
       <h2>New submission</h2>
       <ul>
         <li><b>Name:</b> ${name}</li>
-        <li><b>Phone:</b> ${phone}</li>
+        <li><b>Contact Number:</b> ${contactNumber}</li>
+        <li><b>Area:</b> ${area}</li>
+        <li><b>Locality:</b> ${locality}</li>
+        <li><b>Type Of Waste:</b> ${wasteType}</li>
+        <li><b>Amount Of Waste:</b> ${wasteAmount}</li>
         <li><b>Location:</b> ${location}</li>
-        <li><b>User Email:</b> ${email || "(not provided)"}</li>
       </ul>
     `;
 
@@ -93,7 +98,6 @@ app.post("/send-email", async (req, res) => {
       subject: "New Form Submission",
       text,
       html,
-      ...(email ? { replyTo: email } : {}), // if you capture user email, owner can reply
     });
 
     res.json({ success: true, message: "Email sent" });
