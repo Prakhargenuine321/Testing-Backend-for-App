@@ -92,6 +92,8 @@ app.post("/send-email", upload.array("images", 5), async (req, res) => {
       });
     }
 
+    const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${location}`;
+
     const text = `New submission:
 - Name: ${name}
 - Contact Number: ${contactNumber}
@@ -99,7 +101,8 @@ app.post("/send-email", upload.array("images", 5), async (req, res) => {
 - Locality: ${locality}
 - Type Of Waste: ${wasteType}
 - Amount Of Waste: ${wasteAmount}
-- Location: ${location}`;
+- Location: ${location}
+- Map: ${googleMapsUrl}`;
 
     const html = `
       <h2>New submission</h2>
@@ -111,6 +114,7 @@ app.post("/send-email", upload.array("images", 5), async (req, res) => {
         <li><b>Type Of Waste:</b> ${wasteType}</li>
         <li><b>Amount Of Waste:</b> ${wasteAmount}</li>
         <li><b>Location:</b> ${location}</li>
+        <li><b>Map:</b> <a href="${googleMapsUrl}" target="_blank">View on Google Maps</a></li>
       </ul>
     `;
 
