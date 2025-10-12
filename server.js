@@ -8,19 +8,16 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// --- Transporter (choose one provider) ---
-// Option A: Brevo (Sendinblue) SMTP (recommended: easy, API key as password)
-//   SMTP_HOST=smtp-relay.brevo.com
-//   SMTP_PORT=587
-//   SMTP_USER=your-brevo-login (often your email)
-//   SMTP_PASS=your-brevo-API-key
-//
-// Option B: Gmail (requires 2FA + App Password; not your normal password)
-//   SMTP_HOST=smtp.gmail.com
-//   SMTP_PORT=587
-//   SMTP_USER=yourgmail@gmail.com
-//   SMTP_PASS=your-16-char-app-password
+// --- Debug: Log environment variables (hide passwords) ---
+console.log("🔍 Environment check:");
+console.log("  SMTP_HOST:", process.env.SMTP_HOST || "❌ NOT SET");
+console.log("  SMTP_PORT:", process.env.SMTP_PORT || "❌ NOT SET");
+console.log("  SMTP_USER:", process.env.SMTP_USER || "❌ NOT SET");
+console.log("  SMTP_PASS:", process.env.SMTP_PASS ? "✅ SET" : "❌ NOT SET");
+console.log("  MAIL_FROM:", process.env.MAIL_FROM || process.env.SMTP_USER || "❌ NOT SET");
+console.log("  MAIL_TO:", process.env.MAIL_TO || process.env.RECEIVER_EMAIL || "❌ NOT SET");
 
+// --- Transporter ---
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: Number(process.env.SMTP_PORT || 587),
@@ -29,12 +26,17 @@ const transporter = nodemailer.createTransport({
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
+  // Add timeout to fail faster
+  connectionTimeout: 10000, // 10 seconds
+  greetingTimeout: 10000,
+  socketTimeout: 10000,
 });
 
-// Verify transporter on boot (shows clear logs in Render)
+// Verify transporter on boot
 transporter.verify((err, success) => {
   if (err) {
     console.error("❌ SMTP verify failed:", err.message);
+    console.error("   Full error:", err);
   } else {
     console.log("✅ SMTP ready:", success);
   }
@@ -47,6 +49,7 @@ app.get("/health", async (_req, res) => {
     await transporter.verify();
     res.json({ ok: true });
   } catch (e) {
+    console.error("Health check failed:", e);
     res.status(500).json({ ok: false, error: String(e) });
   }
 });
@@ -61,16 +64,24 @@ const upload = multer({
 
 // Main endpoint
 app.post("/send-email", upload.array("images", 5), async (req, res) => {
+  console.log("📨 Received email request");
+  
   try {
     const { name, contactNumber, area, locality, wasteType, wasteAmount, location } = req.body || {};
+    
+    console.log("📋 Form data:", { name, contactNumber, area, locality, wasteType, wasteAmount, location: location ? "present" : "missing" });
+    
     if (!name || !contactNumber || !area || !locality || !wasteType || !wasteAmount || !location) {
+      console.log("❌ Missing required fields");
       return res
         .status(400)
-        .json({ success: false, message: "Missing fields: name/contactNumber/area/locality/wasteType/wasteAmount/location" });
+        .json({ success: false, message: "Missing required fields" });
     }
 
     // Handle images
     const files = req.files || [];
+    console.log(`📎 Attachments: ${files.length} file(s)`);
+    
     if (files.length > 5) {
       return res.status(400).json({ success: false, message: "Max 5 images allowed" });
     }
@@ -86,37 +97,33 @@ app.post("/send-email", upload.array("images", 5), async (req, res) => {
     const toAddress = process.env.MAIL_TO || process.env.RECEIVER_EMAIL;
 
     if (!fromAddress || !toAddress) {
+      console.error("❌ Email addresses not configured");
       return res.status(500).json({
         success: false,
-        message: "Server not configured: set MAIL_FROM and MAIL_TO (or RECEIVER_EMAIL)",
+        message: "Server not configured: set MAIL_FROM and MAIL_TO",
       });
     }
 
-    // Parse location - it might be a string or an object
+    // Parse location
     let locationString;
     let googleMapsUrl;
     
     try {
-      // If location is a JSON string, parse it
       const locationData = typeof location === 'string' ? JSON.parse(location) : location;
       
       if (typeof locationData === 'object' && locationData !== null) {
-        // If it's an object with lat/lng
         if (locationData.lat !== undefined && locationData.lng !== undefined) {
           locationString = `${locationData.lat}, ${locationData.lng}`;
           googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${locationData.lat},${locationData.lng}`;
         } else {
-          // Fallback: stringify the object
           locationString = JSON.stringify(locationData);
           googleMapsUrl = null;
         }
       } else {
-        // It's already a string
         locationString = String(locationData);
         googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(locationString)}`;
       }
     } catch (e) {
-      // If parsing fails, treat it as a plain string
       locationString = String(location);
       googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(locationString)}`;
     }
@@ -144,6 +151,9 @@ app.post("/send-email", upload.array("images", 5), async (req, res) => {
       </ul>
     `;
 
+    console.log(`📧 Sending email from ${fromAddress} to ${toAddress}...`);
+    
+    const startTime = Date.now();
     await transporter.sendMail({
       from: `"Form Bot" <${fromAddress}>`,
       to: toAddress,
@@ -152,14 +162,22 @@ app.post("/send-email", upload.array("images", 5), async (req, res) => {
       html,
       attachments,
     });
+    
+    const duration = Date.now() - startTime;
+    console.log(`✅ Email sent successfully in ${duration}ms`);
 
     res.json({ success: true, message: "Email sent" });
   } catch (err) {
-    console.error("❌ Send error:", err && err.response ? err.response : err);
+    console.error("❌ Send error:", err.message);
+    console.error("   Error code:", err.code);
+    console.error("   Error response:", err.response);
+    console.error("   Full error:", err);
+    
     res.status(500).json({
       success: false,
       message: "Failed to send email",
       error: err?.message || String(err),
+      code: err?.code,
     });
   }
 });
