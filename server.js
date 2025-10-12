@@ -92,7 +92,34 @@ app.post("/send-email", upload.array("images", 5), async (req, res) => {
       });
     }
 
-    const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${location}`;
+    // Parse location - it might be a string or an object
+    let locationString;
+    let googleMapsUrl;
+    
+    try {
+      // If location is a JSON string, parse it
+      const locationData = typeof location === 'string' ? JSON.parse(location) : location;
+      
+      if (typeof locationData === 'object' && locationData !== null) {
+        // If it's an object with lat/lng
+        if (locationData.lat !== undefined && locationData.lng !== undefined) {
+          locationString = `${locationData.lat}, ${locationData.lng}`;
+          googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${locationData.lat},${locationData.lng}`;
+        } else {
+          // Fallback: stringify the object
+          locationString = JSON.stringify(locationData);
+          googleMapsUrl = null;
+        }
+      } else {
+        // It's already a string
+        locationString = String(locationData);
+        googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(locationString)}`;
+      }
+    } catch (e) {
+      // If parsing fails, treat it as a plain string
+      locationString = String(location);
+      googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(locationString)}`;
+    }
 
     const text = `New submission:
 - Name: ${name}
@@ -101,8 +128,7 @@ app.post("/send-email", upload.array("images", 5), async (req, res) => {
 - Locality: ${locality}
 - Type Of Waste: ${wasteType}
 - Amount Of Waste: ${wasteAmount}
-- Location: ${location}
-- Map: ${googleMapsUrl}`;
+- Location: ${locationString}${googleMapsUrl ? `\n- Map: ${googleMapsUrl}` : ''}`;
 
     const html = `
       <h2>New submission</h2>
@@ -113,8 +139,8 @@ app.post("/send-email", upload.array("images", 5), async (req, res) => {
         <li><b>Locality:</b> ${locality}</li>
         <li><b>Type Of Waste:</b> ${wasteType}</li>
         <li><b>Amount Of Waste:</b> ${wasteAmount}</li>
-        <li><b>Location:</b> ${location}</li>
-        <li><b>Map:</b> <a href="${googleMapsUrl}" target="_blank">View on Google Maps</a></li>
+        <li><b>Location:</b> ${locationString}</li>
+        ${googleMapsUrl ? `<li><b>Map:</b> <a href="${googleMapsUrl}" target="_blank">View on Google Maps</a></li>` : ''}
       </ul>
     `;
 
