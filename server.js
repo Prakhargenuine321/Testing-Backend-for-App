@@ -94,30 +94,35 @@ app.post("/send-email", upload.array("images", 5), async (req, res) => {
       </ul>
     `;
 
-    // 🧩 Prepare attachments (convert uploaded images to Base64 for Brevo API)
-    const attachments = files.map((file) => ({
+    const attachments = files.length
+  ? files.map((file) => ({
       name: file.originalname,
       content: file.buffer.toString("base64"),
-    }));
+    }))
+  : undefined; // don't include if empty
 
-    // 📨 Send using Brevo API (HTTPS request)
-    console.log("📧 Sending email via Brevo API...");
+console.log("📧 Sending email via Brevo API...");
 
-    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
-      method: "POST",
-      headers: {
-        "accept": "application/json",
-        "content-type": "application/json",
-        "api-key": process.env.BREVO_API_KEY,
-      },
-      body: JSON.stringify({
-        sender: { name: "Form Bot", email: fromEmail },
-        to: [{ email: toEmail }],
-        subject: "New Waste Collection Request",
-        htmlContent,
-        attachment: attachments,
-      }),
-    });
+const emailPayload = {
+  sender: { name: "Form Bot", email: fromEmail },
+  to: [{ email: toEmail }],
+  subject: "New Waste Collection Request",
+  htmlContent,
+};
+
+// ✅ Only include attachment if it exists
+if (attachments) emailPayload.attachment = attachments;
+
+const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+  method: "POST",
+  headers: {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "api-key": process.env.BREVO_API_KEY,
+  },
+  body: JSON.stringify(emailPayload),
+});
+
 
     const data = await response.json();
 
